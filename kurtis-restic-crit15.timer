@@ -1,0 +1,10 @@
+[Unit]
+Description=restic backup script for user kurtis every 15 minutes
+
+[Timer]
+Unit=kurtis-restic-crit.service
+OnCalendar=*:0/15
+Persistent=true
+
+[Install]
+WantedBy=timers.target

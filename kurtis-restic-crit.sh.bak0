@@ -1,0 +1,138 @@
+#!/bin/bash
+#----------------------------------------------------------------
+# Use restic and rclone to backup critical directories
+#
+# This script can be called from a command line or by a systemd service.
+# This script uses OS environment variables as parameters. Here are the
+# environment variables that must be exported:
+# 
+# BASE_DIR  - path to a directory containing directories to backu
+# DIRS      - comma separated string of directories in BASE_DIR
+# REPO      - repository string from restic init.
+#             The full restic init must be executed before
+#             this script is called.
+# PW_FILE   - path to a password file. It should have permissions 600.
+# 
+#
+# REF: Configuration and Usage of rclone (or restic) and Box
+# URL: https://github.ibm.com/openclient/ocfedora/wiki/Configuration-and-Usage-of-rclone-(or-restic)-and-Box
+#
+# Configuration:
+# 1. sudo dnf -y install restic rclone
+# 2. restic init --repo sftp:kurtis@192.168.0.210:/data/restic/chloecat/kurtis
+#----------------------------------------------------------------
+
+BANR='#---------------------------------------------------------'
+THIS_SCRIPT=$(readlink -f "${BASH_SOURCE[0]}" )
+
+function check_envars() {
+   echo "Checking environment variables."
+   local RC=0
+
+   if [[ -z "${BASE_DIR}" ]]; then
+      echo "Environment variable 'BASE_DIR' is blank"
+      _=$((RC++))
+   fi
+
+   if [[ -z "${REPO}" ]]; then
+      echo "Environment variable 'REPRO' is blank"
+      _=$((RC++))
+   fi
+
+   if [[ -z "${PW_FILE}" ]]; then
+      echo "Environment variable 'PW_FILE' is blank"
+      _=$((RC++))
+   fi
+
+   # DIRS
+   if [[ -z "${DIRS}" ]]; then
+      echo "Environment variable 'DIRS' is blank"
+      _=$((++RC))
+   fi
+   
+   oldIFS=$IFS
+   IFS=','
+   read -a DIR_ARRAY <<< "$DIRS"
+   IFS=$oldIFS
+   LEN=${#DIR_ARRAY}
+
+   echo "<RC=${RC}> <BASE_DIR=${BASE_DIR}> <REPO=${REPO}>"
+   echo "<PW_FILE=${PW_FILE}> <DIRS=${DIRS}> <LEN=${LEN}>"
+   for ITEM in "${DIR_ARRAY[@]}"; do
+      echo "$ITEM"
+   done
+
+   if (( RC == 0 )); then
+      echo "All environment variables have non-blank values"
+   else
+      echo "There were ${RC} blank environment variables. Aborting this script."
+      exit 1
+   fi
+}  # check_envars()
+
+function __timer()
+{
+   # Timer should NOT have tracing instrumentation.
+   if [[ $# -eq 0 ]]; then
+      date '+%s'
+   else
+      local stime=$1
+      local etime dt ds dm dh
+      etime=$(date '+%s')
+
+      if [[ -z "$stime" ]]; then stime=$etime; fi
+
+      dt=$((etime - stime))
+      ds=$((dt % 60))
+      dm=$(((dt / 60) % 60))
+      dh=$((dt / 3600))
+      printf 'elapsed time: %02d:%02d:%02d' $dh $dm $ds
+    fi
+}  # __timer()
+
+function check_inet() {
+   ping -c1 -W2 -w1 -q www.google.com >/dev/null 2>&1;RC=$?;
+   if [[ $RC -eq 0 ]]; then
+      echo ">>> FOUND www.google.com"
+   else
+      echo ">>> Could not find www.google.com, aborting script now."
+      exit 1
+   fi
+}  # check_inet()
+
+function backup_dir() {
+   local START_T ETIME
+   DIR=$1
+   echo -e "\n${BANR}"
+   echo "# RUNNING: restic backup ${DIR} -r ${REPO} -p ${PW_FILE}" -q
+   echo "${BANR}"
+   START_T=$( __timer )
+   ETIME=""
+   # NOTE: Do not put double-quoutes around ${DIR}.
+   #       Want restic to see a list of dirs
+   restic backup ${DIR} -r "${REPO}" -p "${PW_FILE}" -q; RC=$?
+   ETIME=$( __timer "${START_T}")
+   echo "RC=${RC} ${ETIME}"
+   echo
+}  # backup_dir()
+
+echo ">>> STARTING"
+
+echo -e "\n${BANR}"
+echo "# THIS_SCRIPT=${THIS_SCRIPT}"
+echo -e "${BANR}"
+
+check_envars
+# Control reaches here if environment variables non-blank
+check_inet
+# BASE_DIR="/home/kurtis"
+# DIRS=( "backup" "bin" "dev" "Documents" "Downloads" \
+#        "mytmp" "Pictures" "Projects" "Videos" )
+# ALL_PATHS=""
+
+for DIR in "${DIR_ARRAY[@]}"; do
+  FULL_PATH="${BASE_DIR}/${DIR}"
+  ALL_PATHS="${ALL_PATHS} ${FULL_PATH}"
+done
+echo "backup_dir \"${ALL_PATHS}\""
+echo ">>> FINISHED"

@@ -1,0 +1,8 @@
+[Unit]
+Description=Run daily kurtis-restic-prune.sh script
+After=local-network-pingable.service
+
+[Service]
+Type=simple
+User=kurtis
+ExecStart=/home/kurtis/dev/ibm-git/restic-backup-tools/dev/kurtis-restic-prune.sh

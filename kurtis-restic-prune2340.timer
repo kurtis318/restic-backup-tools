@@ -1,0 +1,10 @@
+[Unit]
+Description=Run daily restic prune at 11:40pm everyday
+
+[Timer]
+Unit=kurtis-restic-prune.service
+OnCalendar=*-*-* 23:40:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target
